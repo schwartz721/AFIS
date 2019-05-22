@@ -2,6 +2,8 @@ from tkinter import *
 from tk_valid import validate_alphanum, validate_float
 import os
 import pickle
+from datetime import datetime
+from tk_valid import validate_int
 
 
 class Quit_To_Menu():
@@ -35,38 +37,45 @@ class Save_Sim():
         self.instructions.set('Choose a name for the save file:')
         Label(self.master, textvariable=self.instructions).pack()
         self.save_name = StringVar()
+        try:
+            self.save_name.set(sim.file_name)
+        except AttributeError:
+            pass
         self.save_name.trace('w', self.callback)  # reverts from error/overwrite instructions
         entry = Entry(self.master, textvariable=self.save_name, validate='key',
                       vcmd=(self.master.register(validate_alphanum), "%P"))
         entry.pack()
-        Button(self.master, text='Close', command=lambda: self.close()).pack(side=LEFT)
+        Button(self.master, text='Close', command=lambda: self.destroy(0)).pack(side=LEFT)
         self.b_text = StringVar()
         self.b_text.set('Save')
-        Button(self.master, textvariable=self.b_text, command=lambda: self.save()).pack(side=RIGHT)
+        Button(self.master, textvariable=self.b_text, command=lambda: self.destroy(1)).pack(side=RIGHT)
         entry.focus_force()
 
-    def save(self):
-        file_name = self.save_name.get()
-        files = os.listdir()
-        files = [i for i in files if i.isalnum() is True]
-        if file_name == '':
-            self.instructions.set('File name must contain alpha or numeric characters only')
-            return
-        elif file_name in files and self.b_text.get() != 'Overwrite':
-            self.instructions.set('File name already exists. Do you want to overwrite the file?')
-            self.b_text.set('Overwrite')
-            return
-
-        with open(file_name, 'wb') as save_file:
-            pickle.dump(self.sim, save_file)
+    def destroy(self, boolean):
+        if boolean:
+            self.file_name = self.save_name.get()
+            files = os.listdir()
+            files = [i for i in files if i.isalnum() is True]
+            if self.file_name == '':
+                self.instructions.set('File name must contain alpha or numeric characters only')
+                return
+            elif self.file_name in files and self.b_text.get() != 'Overwrite':
+                self.instructions.set('File name already exists. Do you want to overwrite the file?')
+                self.b_text.set('Overwrite')
+                return
+            with open(self.file_name, 'wb') as save_file:
+                pickle.dump(self.sim, save_file)
+        else:
+            self.file_name = None
         self.master.destroy()
 
     def callback(self, *args):
         self.instructions.set('Choose a name for the save file:')
         self.b_text.set('Save')
 
-    def close(self):
-        self.master.destroy()
+    def wait(self):
+        self.master.wait_window()
+        return self.file_name
 
 
 class Dimensions():
@@ -121,3 +130,30 @@ class Dimensions():
     def wait(self):
         self.master.wait_window()
         return (self.x_dim, self.y_dim, self.unit)
+
+
+class Set_Start_Year():
+    def __init__(self, master, year, x, y):
+        self.master = master
+        self.master.geometry('+%d+%d' % (x, y))
+        self.master.config(borderwidth=3, relief=RAISED)
+        self.year = IntVar()
+        if year == 0:
+            self.year.set(datetime.now().year)
+        else:
+            self.year.set(year)
+        Label(self.master, text='Set the start year for the simulation'
+              ).grid(row=0, column=0, columnspan=2)
+        Entry(self.master, validate='key', vcmd=(self.master.register(validate_int), "%P"),
+              textvariable=self.year, width=5).grid(row=1, column=0, columnspan=2)
+        Button(self.master, text='Close', command=lambda: self.destroy(0)).grid(row=2, column=0)
+        Button(self.master, text='Set Start Year', command=lambda: self.destroy(1)).grid(row=2, column=1)
+
+    def destroy(self, boolean):
+        self.boolean = boolean
+        self.year = self.year.get()
+        self.master.destroy()
+
+    def wait(self):
+        self.master.wait_window()
+        return (self.boolean, self.year)
