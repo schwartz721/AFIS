@@ -79,3 +79,13 @@ class Crop(object):
             height = (self.plant.height, self.plant.max_height)[int((year % 1) * 2)]
             radius = (self.plant.radius, self.plant.max_radius)[int((year % 1) * 2)]
             return (height, radius)
+
+    def unit_change(self, new_unit):
+        if new_unit == 'm':
+            conversion = 0.305
+        else:
+            conversion = 3.281
+        for attr, param in (i for i in self.plant.__dict__.items() if isinstance(i[1], float)):
+            self.plant.__dict__[attr] *= conversion
+        for attr, param in (i for i in self.planting_params.__dict__.items() if isinstance(i[1], float)):
+            self.planting_params.__dict__[attr] *= conversion

@@ -1,0 +1,56 @@
+CHANGELOG 
+
+-----v0.5-----
+
+Major changes:
+-Visual edit: When defining the planting parameters for a new or existing crop, the user can choose 'Visual Edit' to see the plants in their default positions, then adjust their locations and spacing using the arrow keys and WASD. Pressing enter submits the planting parameters, and pressing Escape cancels the placement/change. The Visual Edit button is available from the Planting Parameters window, and in the sidebar.
+-Sidebar: Long and Short Cycle crops now are separate in the sidebar. The sidebars now have scrollbars, so the user can access an unlimited number of crops from the sidebar. The year that each crop was planted is now also displayed on the sidebar, and the sidebar is sorted by planting year.
+-Start Year: Instead of years starting with Year 0, the user can choose a custom start year for the simulation, so that the simulation can match up with the date.
+-Previous savefiles not compatible: Due to a restructuring of the Crop class and simplification of storage of crops inside of the Simulation class, savefiles from previous versions are not compatible with v0.5.
+
+Minor changes:
+-Savefile delete: Users can now delete unwanted save files
+-Save name auto-pop: Simulations now have an attribute that saves the name that it has been previously saved as, and this string auto-populates into the entry field of the save window.
+-Plant alphabetization: Saved plant profiles are now displayed in alphabetical order. 'New Plant' and 'New Plant + Save' options are displayed last. The plant profiles are also displayed from a list, not directly from their dictionary, so the 'New Plant' options are no longer erased from the dictionary so as not to be shown in the Manage Plant Profiles window.
+-Planting Params object: Crop objects now hold a Planting Params object, which in turn holds all of the planting parameters (x and y offset, crop and row spacing, and row count). The Planting Params object also has a crop_locations attribute, which stores the (x,y) locations of the crop, given the planting parameters. This negates the need to find the crop locations every time the simulation is drawn, and migrates the associated function from inside the Simulation class to the Planting Params class. This change makes savefiles from previous versions incompatible.
+-Crop keys: Keys used to store long and short cycle crops are now just a simple string of an uppercase letter (L for long cycle or S for short cycle) followed by a number (starting with 1 and increasing). New crops are given a key with a number one greater than the greatest key already in its dictionary.
+-Load Simulation button: Instead of disabling the Load Simulation button on the home screen is a savefile is not available, a window appears stating that there are no savefiles available if the button is pressed.
+-Color Preview and Crop label text: If a color in the darkest quadrant (top left) is selected, the 'Color preview' text in the Color Window and the Planting Parameters window will display in white instead of black. This is also true for the label holding the plant's name in the sidebar, allowing the label's background to match the rest of the frame, instead of being white.
+-Planting Year: The Planting year field of the Planting Parameters window auto-populates to the year currently being displayed, when creating a new crop.
+-Crop_Dict, Frame_List: The dictionaries that hold the short and long cycle crops that have been planted have been merged into a single dictionary. The frame_list attribute of the Simulation class has been removed, because crop_dict.items() can be used in its place. Without the frame_list attribute, the Frame_Info class has become obsolete and has been removed.
+
+Known bugs:
+-Changing units: FIXED v0.5.1: If the units of a simulation are changed using the Resize Plot button, the crops' growth and planting parameters do not change accordingly.
+
+Notes:
+-v0.5.1 was abandoned unfinished. v0.5.2 is the only functioning version of the 0.5 set, because the modules that it depends on are not compatible with v0.5 or v0.5.1.
+
+-----v0.4-----
+
+Major changes:
+-Complete rewrite: The code has been completely rewritten and restructured so as to be easier to follow and edit. The main AFIS file now only holds code pertaining to the root window. All toplevel windows are now found in modules. Instead of toplevel windows accessing global variables, they now take more arguments and return values when they are destroyed. Savefiles from previous versions are compatible with the rewrite.
+-Short cycle crops: Short cycle crops (which only grow for one year) are now available. They have initial and maximum growth parameters, which are shown in Planting and Harvest seasons, respectively. The dictionary of plant profiles has been restructured to accommodate short cycle crops, so the 'plant_dict' pickled file from previous version is not compatible.
+
+Minor changes:
+-Manage Plant Profiles: The Manage Plant Profiles window accessible from the home screen has been restructured to accommodate short cycle crops.
+-Load Simulation button: If there are no savefiles available, the Load Simulation button will be disabled. In previous versions, pressing this button without a savefile available would crash the application, so versions were shipped with a 'demo' savefile.
+
+-----v0.3-----
+
+Major changes:
+-Color selection: Instead of a dropdown list of preselected color choices, the user now gets to choose their own colors from a color palette window.
+-Transparency: Overlapping areas of crops are now drawn in a color that is halfway between the two, giving the appearance of transparency. To accomplish this, the crops are now represented as squares instead of circles
+-Seasons: Each year now has a Planting and Harvest season. Harvest season is associated with an increase of 0.5 in the year. This is in preparation for the inclusion of Short cycle crops in the next version.
+
+Minor changes:
+-Home screen: The home screen is now green instead of white.
+
+-----v0.2-----
+
+Major changes:
+-Manage Plant Profiles: The user can now add, edit, and delete plant profiles from the home screen.
+
+Minor changes:
+-Home screen: The home screen is no longer an image.
+-Loss of focus bug resolved: Added manual focus button to plant windows to prevent window losing focus and dropping behind main window.
+-Resize Plot Auto-populate: The fields in the Plot Dimensions window now auto-populate with the plot's current dimensions.

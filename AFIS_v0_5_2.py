@@ -5,6 +5,8 @@ import sim_windows
 import crop_windows
 import plant_classes
 import pickle
+from math import ceil
+from copy import deepcopy
 
 
 class Application():
@@ -92,8 +94,10 @@ class Application():
         Button(top_right_bar, text='Resize Plot', highlightbackground='gray70',
                command=lambda: self.open_window_sim('set dims')).pack(side=RIGHT)
         self.dim_text = StringVar()
-        self.dim_text.set('Dimensions: 0 x 0 ')
+        self.dim_text.set('0 x 0 ')
         Label(top_right_bar, bd=0, textvariable=self.dim_text).pack(side=RIGHT)
+        Button(top_right_bar, text='Set Start Year', highlightbackground='gray70',
+               command=lambda: self.open_window_sim('year')).pack(side=LEFT)
 
         Button(top_center_bar, highlightbackground='gray70', text='Next Year',
                command=lambda: self.change_year(1)).pack(side=RIGHT)
@@ -122,16 +126,39 @@ class Application():
         side_top = Frame(self.side_bar, bg='black', bd=3)
         side_top.pack(side=TOP)
         side_bottom = Frame(self.side_bar, bg='black', bd=3)
-        side_bottom.pack(side=BOTTOM, padx=20, fill=BOTH)
+        side_bottom.pack(side=BOTTOM, padx=29, fill=BOTH)
         self.side_mid = Frame(self.side_bar, bg='black', bd=3)
         self.side_mid.pack(side=TOP, fill=BOTH)
 
         Button(side_top, highlightbackground='black', text='Add Long-Cycle Crop',
-               command=lambda: self.open_window_plant_specs('new crop', 'long', self.sim.unit)).pack()
+               command=lambda: self.open_window_plant_specs('new crop', 'long',
+                                                            self.sim.unit)).pack()
         Button(side_top, highlightbackground='black', text='Add Short-Cycle Crop',
-               command=lambda: self.open_window_plant_specs('new crop', 'short', self.sim.unit)).pack()
-        Label(side_bottom, bg='black', fg='gray70', bd=0, text='AFIS version 0.5.0\n'
+               command=lambda: self.open_window_plant_specs('new crop', 'short',
+                                                            self.sim.unit)).pack()
+        Label(side_bottom, bg='black', fg='gray70', bd=0, text='AFIS version 0.5.2\n'
               'Andrew Schwartz\nCreated 2019').pack(side=BOTTOM)
+
+        self.master.update_idletasks()
+        height = self.side_bar.winfo_height() - side_top.winfo_height() - side_bottom.winfo_height()
+        self.long_slider = IntVar()
+        self.long_slider.trace('w', self.draw_sidebar)
+        self.long_scale = Scale(self.side_mid, from_=0, to=0, variable=self.long_slider,
+                                orient=VERTICAL, showvalue=0, length=(height / 2))
+        self.long_scale.grid(row=0, column=1)
+        self.short_slider = IntVar()
+        self.short_slider.trace('w', self.draw_sidebar)
+        self.short_scale = Scale(self.side_mid, from_=0, to=0, variable=self.short_slider,
+                                 orient=VERTICAL, showvalue=0, length=(height / 2))
+        self.short_scale.grid(row=1, column=1)
+        self.side_mid_top = Frame(self.side_mid, bg='black', bd=3,
+                                  height=(height / 2), width=180)
+        self.side_mid_top.grid(row=0, column=0, sticky=N)
+        self.side_mid_top.pack_propagate(0)
+        self.side_mid_bottom = Frame(self.side_mid, bg='black', bd=3,
+                                     height=(height / 2), width=180)
+        self.side_mid_bottom.grid(row=1, column=0, sticky=N)
+        self.side_mid_bottom.pack_propagate(0)
 
         instruction_bar = Frame(self.sim_frame, bg='black')
         instruction_bar.pack(fill=X, side=TOP)
@@ -151,11 +178,15 @@ class Application():
             x = str(round(self.sim.x_dim, 2))
             y = str(round(self.sim.y_dim, 2))
             unit = self.sim.unit
-            self.dim_text.set('Dimensions: %s %s x %s %s ' % (x, unit, y, unit))
+            self.dim_text.set('%s %s x %s %s ' % (x, unit, y, unit))
+            self.year.set(self.sim.start_year)
             self.draw_sim()
             self.draw_sidebar()
+            self.config_scale('S')
+            self.config_scale('L')
         else:
             self.sim = sim_class.Simulation()
+            self.draw_sidebar()
             self.open_window_sim('set dims')
 
     # Functions used by the simulation screen
@@ -173,30 +204,43 @@ class Application():
                 self.sim_frame.destroy()
                 self.setup_home()
         elif window == 'save':
-            sim_windows.Save_Sim(root2, self.sim, x, y)
+            file_name = sim_windows.Save_Sim(root2, self.sim, x, y).wait()
+            if file_name:
+                self.sim.file_name = file_name
         elif window == 'set dims':
             try:
                 dims = (self.sim.x_dim, self.sim.y_dim, self.sim.unit)
+                old_unit = self.sim.unit
             except AttributeError:
                 dims = None
-            x_dim, y_dim, unit = sim_windows.Dimensions(root2, dims, x, y).wait()
-            self.sim.resize(x_dim, y_dim, unit)
+                old_unit = None
+            x_dim, y_dim, new_unit = sim_windows.Dimensions(root2, dims, x, y).wait()
+            self.sim.resize(x_dim, y_dim, new_unit)
+            if old_unit and old_unit != new_unit:
+                action = 'unit change'
+            else:
+                action = 'position'
+            self.sim.all_crops(action)
             x = str(round(x_dim, 2))
             y = str(round(y_dim, 2))
-            self.dim_text.set('Dimensions: %s %s x %s %s ' % (x, unit, y, unit))
-            for crop in self.sim.long_crop_dict.values():
-                crop.planting_params.position_crop(self.sim.x_dim, self.sim.y_dim)
-            for crop in self.sim.short_crop_dict.values():
-                crop.planting_params.position_crop(self.sim.x_dim, self.sim.y_dim)
+            self.dim_text.set('%s %s x %s %s ' % (x, new_unit, y, new_unit))
             self.draw_sim()
+        elif window == 'year':
+            old_year = self.sim.start_year
+            boolean, new_year = sim_windows.Set_Start_Year(root2, old_year, x, y).wait()
+            if boolean:
+                self.sim.start_year = new_year
+                delta = new_year - old_year
+                self.sim.all_crops(delta)
+                self.change_year(delta)
 
     def change_year(self, delta):
         self.year.set(self.year.get() + delta)
-        if self.year.get() < 1:
+        if self.year.get() < self.sim.start_year + 1:
             self.b_prev_year.config(state='disabled')
         else:
             self.b_prev_year.config(state='normal')
-        if self.year.get() < 0.5:
+        if self.year.get() < self.sim.start_year + 0.5:
             self.b_prev_season.config(state='disabled')
         else:
             self.b_prev_season.config(state='normal')
@@ -240,12 +284,11 @@ class Application():
 
         # sorts the list of long crops by radius, from larger to smaller
         sorted_crop_list = []
-        for crop in self.sim.long_crop_dict.values():
-            if year >= crop.plant_year:
+        for crop in self.sim.crop_dict.values():
+            if type(crop.plant).__name__ == 'Long_Cycle_Plant' and year >= crop.plant_year:
                 height, radius = crop.size(year)
                 sorted_crop_list.append((crop, radius))
-        for crop in self.sim.short_crop_dict.values():
-            if int(year) == crop.plant_year:
+            elif type(crop.plant).__name__ == 'Short_Cycle_Plant' and int(year) == crop.plant_year:
                 height, radius = crop.size(year)
                 sorted_crop_list.append((crop, radius))
         sorted_crop_list.sort(key=lambda x: x[1], reverse=True)
@@ -299,34 +342,53 @@ class Application():
             b3 = (b1 + b2) // 512
             self.canvas.create_rectangle(x1, y1, x2, y2, fill='#%02x%02x%02x' % (r3, g3, b3))
 
-    def add_to_sidebar(self, key):
-        if key[0] == 'L':
-            d = self.sim.long_crop_dict
+    def config_scale(self, key):
+        self.master.update_idletasks()
+        S_or_L = key[0]
+        if S_or_L == 'L':
+            frame = self.side_mid_top
+            scale = self.long_scale
         else:
-            d = self.sim.short_crop_dict
-        crop = d[key]
-        self.sim.frame_list.append(sim_class.Frame_Info(crop, key))
-        self.draw_sidebar()
+            frame = self.side_mid_bottom
+            scale = self.short_scale
+        frame_height = frame.winfo_height()
+        try:
+            thumbnail_height = frame.winfo_children()[1].winfo_height()
+        except IndexError:
+            thumbnail_height = 1
+        thumbnails = thumbnail_height * (1 + len([i for i in self.sim.crop_dict.keys() if S_or_L == i[0]]))
+        scale_max = max(0, ceil((thumbnails - frame_height) / thumbnail_height))
+        scale.config(to=scale_max)
 
-    def draw_sidebar(self):
-        self.side_mid.destroy()
-        self.side_mid = Frame(self.side_bar, bg='black', bd=3)
-        self.side_mid.pack(side=TOP, fill=BOTH)
-        for i in range(len(self.sim.frame_list)):
-            crop = self.sim.frame_list[i].crop
-            frame = Frame(self.side_mid, bg=crop.color, bd=2)
-            frame.pack(side=TOP, fill=X)
-            if max(int(crop.color[1:3], 16), int(crop.color[3:5], 16)) < 128:
-                text_color = 'white'
+    def draw_sidebar(self, *args):
+        for frame, slider, S_or_L in ((self.side_mid_top, self.long_slider, 'L'),
+                                      (self.side_mid_bottom, self.short_slider, 'S')):
+            for widget in frame.winfo_children():
+                widget.destroy()
+            if S_or_L == 'S':
+                short_or_long = 'Short'
             else:
-                text_color = 'black'
-            Label(frame, text=crop.plant.name, bg=crop.color, fg=text_color, bd=0).pack()
-            Button(frame, text='Edit', highlightbackground=crop.color,
-                   command=lambda i=i: self.open_window_crop_specs(i, 'edit crop')).pack(side=RIGHT)
-            Button(frame, text='Delete', highlightbackground=crop.color,
-                   command=lambda i=i: self.open_window_crop_specs(i, 'delete')).pack(side=LEFT)
-            Button(frame, text='Visual Edit', highlightbackground=crop.color,
-                   command=lambda i=i: self.visual_edit(i)).pack()
+                short_or_long = 'Long'
+            Label(frame, text='%s Cycle Crops\nPlant Name (Planting Year)' % short_or_long,
+                  bg='grey70').pack()
+
+            crops = [i for i in self.sim.crop_dict.items() if i[0][0] == S_or_L]
+            crops.sort(key=lambda x: x[1].plant_year)
+            for key, crop in crops[slider.get():]:
+                f = Frame(frame, bg=crop.color, bd=2)
+                f.pack(side=TOP, fill=X)
+                if max(int(crop.color[1:3], 16), int(crop.color[3:5], 16)) < 128:
+                    text_color = 'white'
+                else:
+                    text_color = 'black'
+                Label(f, text='%s (%d)' % (crop.plant.name, crop.plant_year), bg=crop.color,
+                      fg=text_color, bd=0).pack()
+                Button(f, text='Edit', highlightbackground=crop.color,
+                       command=lambda key=key: self.open_window_crop_specs(key, 'edit crop')).pack(side=RIGHT)
+                Button(f, text='Delete', highlightbackground=crop.color,
+                       command=lambda key=key: self.open_window_crop_specs(key, 'delete')).pack(side=LEFT)
+                Button(f, text='Visual Edit', highlightbackground=crop.color,
+                       command=lambda key=key: self.visual_edit(key)).pack()
 
     def open_window_plant_specs(self, action, cycle, unit):
         root2 = Toplevel(self.master)
@@ -343,26 +405,21 @@ class Application():
         if action == 'new crop' and plant:
             self.open_window_crop_specs(plant, 'edit crop')
 
-    def open_window_crop_specs(self, index_or_plant, window):
+    def open_window_crop_specs(self, key_or_plant, window):
         root2 = Toplevel(self.master)
         root2.overrideredirect(1)
         root2.attributes('-topmost', True)
         root2.grab_set()
         x = self.window_w - self.canvas_w + 10
         y = self.window_h - self.canvas_h + 10
-        if isinstance(index_or_plant, int):
-            index = index_or_plant
-            key = self.sim.frame_list[index].key
-            if key[0] == 'L':
-                d = self.sim.long_crop_dict
-            else:
-                d = self.sim.short_crop_dict
-            crop = self.sim.frame_list[index].crop
+        if isinstance(key_or_plant, str):
+            key = key_or_plant
+            crop = self.sim.crop_dict[key]
             plant = crop.plant
             name = plant.name
             color = crop.color
         else:
-            plant = index_or_plant
+            plant = key_or_plant
             crop = None
         if window == 'edit crop':
             unit = self.sim.unit
@@ -374,35 +431,33 @@ class Application():
                                                  plot_x, plot_y).wait()
             if planting_params and not visual:
                 try:
-                    del d[key]
-                    del self.sim.frame_list[index]
+                    del self.sim.crop_dict[key]
                 except UnboundLocalError:
                     pass
-                key = self.sim.add_crop(plant, planting_params, plant_year, color)
-                self.add_to_sidebar(key)
+                key, crop = self.sim.add_crop(plant, planting_params, plant_year, color)
+                self.draw_sidebar()
+                self.config_scale(key)
                 self.draw_sim()
             if planting_params and visual:
                 try:
-                    del d[key]
-                    del self.sim.frame_list[index]
-                    key = self.sim.add_crop(plant, planting_params, plant_year, color)
-                    self.add_to_sidebar(key)
-                    self.visual_edit(len(self.sim.frame_list) - 1)
+                    del self.sim.crop_dict[key]
+                    key, crop = self.sim.add_crop(plant, planting_params, plant_year, color)
+                    self.visual_edit(key)
                 except UnboundLocalError:
                     self.visual_edit(plant_classes.Crop(plant, planting_params, plant_year, color))
         elif window == 'delete':
             if crop_windows.Delete_Crop(root2, name, color, x, y).wait():
-                del self.sim.frame_list[index]
-                del d[key]
+                del self.sim.crop_dict[key]
                 self.draw_sim()
                 self.draw_sidebar()
+                self.config_scale(key)
 
-    def visual_edit(self, index_or_crop):
-        if isinstance(index_or_crop, int):
-            self.index_in_progress = index_or_crop
-            self.crop_in_progress = self.sim.frame_list[self.index_in_progress].crop
+    def visual_edit(self, key_or_crop):
+        if isinstance(key_or_crop, str):
+            self.key_in_progress = key_or_crop
+            self.crop_in_progress = deepcopy(self.sim.crop_dict[self.key_in_progress])
         else:
-            self.crop_in_progress = index_or_crop
+            self.crop_in_progress = key_or_crop
         self.draw_visual_edit(self.crop_in_progress)
         self.instructions.set('Use the arrow keys to position and crop and WASD to change the '
                               'spacing. Press Enter to accept the placement, or Esc to cancel.')
@@ -480,18 +535,21 @@ class Application():
                 self.draw_visual_edit(crop)
             elif event.char == '\r':  # return
                 self.toggle_buttons(self.sim_frame, 'normal')
-                crop = self.crop_in_progress
-                try:
-                    del self.index_in_progress
-                    self.draw_sidebar()
-                except AttributeError:
-                    key = self.sim.add_crop(crop.plant, crop.planting_params, crop.plant_year,
-                                            crop.color)
-                    self.add_to_sidebar(key)
-                self.change_year(0)  # this makes sure the states of the prev_ buttons are correct
+                for oval in self.in_progress_ovals:
+                    self.canvas.delete(oval)
                 self.instructions.set('')
                 del self.in_progress_ovals
+                try:
+                    del self.sim.crop_dict[self.key_in_progress]
+                    del self.key_in_progress
+                except (KeyError, AttributeError):
+                    pass
+                key, crop = self.sim.add_crop(crop.plant, crop.planting_params, crop.plant_year,
+                                              crop.color)
                 del self.crop_in_progress
+                self.draw_sidebar()
+                self.config_scale(key)
+                self.change_year(0)  # this makes sure the states of the prev_ buttons are correct
             elif event.char == '\x1b':  # escape
                 self.toggle_buttons(self.sim_frame, 'normal')
                 for oval in self.in_progress_ovals:
@@ -500,7 +558,7 @@ class Application():
                 del self.in_progress_ovals
                 del self.crop_in_progress
                 try:
-                    del self.index_in_progress
+                    del self.key_in_progress
                 except AttributeError:
                     pass
         except AttributeError:
